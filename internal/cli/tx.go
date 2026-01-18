@@ -23,8 +23,12 @@ value, nonce, type, and decodes RLP-encoded transaction data.`,
 			txHashStr := args[0]
 
 			// Validate and parse transaction hash
-			if !common.IsHexAddress(txHashStr) && len(txHashStr) != 66 {
-				return fmt.Errorf("invalid transaction hash: %s (expected 0x-prefixed 64-character hex string)", txHashStr)
+			if len(txHashStr) < 2 || txHashStr[:2] != "0x" {
+				return fmt.Errorf("invalid transaction hash: %s (must start with 0x)", txHashStr)
+			}
+			hexPart := txHashStr[2:]
+			if len(hexPart) != 64 {
+				return fmt.Errorf("invalid transaction hash: %s (expected 64 hex characters after 0x, got %d)", txHashStr, len(hexPart))
 			}
 
 			txHash := common.HexToHash(txHashStr)
@@ -76,13 +80,9 @@ value, nonce, type, and decodes RLP-encoded transaction data.`,
 				return fmt.Errorf("failed to decode transaction: %w", err)
 			}
 
-			// Store decoded transaction for output formatting
-			// We'll display it in the next commit
-			_ = decodedTx
-
-			if isPending {
-				cmd.Printf("Transaction is pending\n")
-			}
+			// Display formatted transaction
+			output := FormatTransaction(decodedTx, receipt, isPending)
+			cmd.Print(output)
 
 			return nil
 		},

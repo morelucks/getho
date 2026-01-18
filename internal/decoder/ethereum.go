@@ -136,7 +136,7 @@ func (d *EthereumDecoder) setGasPriceFields(result *Transaction, tx *types.Trans
 }
 
 // setBlobGasFields sets blob gas fields for EIP-4844 transactions.
-func (d *EthereumDecoder) setBlobGasFields(result *Transaction, tx *types.Transaction, receipt *types.Receipt) {
+func (d *EthereumDecoder) setBlobGasFields(result *Transaction, _ *types.Transaction, receipt *types.Receipt) {
 	// For blob transactions, we can get blob fee cap from the transaction
 	// Note: go-ethereum v1.14.0 may have different API for blob transactions
 	// For now, we'll set these from the receipt if available
