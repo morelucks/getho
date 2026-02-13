@@ -7,6 +7,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/luckify/getho/internal/analyzer"
 	"github.com/luckify/getho/internal/decoder"
 )
 
@@ -44,7 +45,7 @@ func FormatTransaction(tx *decoder.Transaction, receipt *types.Receipt, isPendin
 	b.WriteString("\n")
 
 	// Value
-	b.WriteString("Value:       " + formatWei(tx.Value) + " ETH\n")
+	b.WriteString("Value:       " + formatEth(tx.Value) + " ETH\n")
 	b.WriteString("Nonce:       " + fmt.Sprintf("%d", tx.Nonce) + "\n")
 	b.WriteString("\n")
 
@@ -69,19 +70,19 @@ func FormatTransaction(tx *decoder.Transaction, receipt *types.Receipt, isPendin
 	b.WriteString("Fee Information\n")
 	b.WriteString(strings.Repeat("-", 80) + "\n")
 	if tx.GasPrice != nil {
-		b.WriteString("Gas Price:   " + formatWei(tx.GasPrice) + " gwei\n")
+		b.WriteString("Gas Price:   " + formatGwei(tx.GasPrice) + " gwei\n")
 	}
 	if tx.MaxFeePerGas != nil {
-		b.WriteString("Max Fee:     " + formatWei(tx.MaxFeePerGas) + " gwei\n")
+		b.WriteString("Max Fee:     " + formatGwei(tx.MaxFeePerGas) + " gwei\n")
 	}
 	if tx.MaxPriorityFeePerGas != nil {
-		b.WriteString("Max Priority: " + formatWei(tx.MaxPriorityFeePerGas) + " gwei\n")
+		b.WriteString("Max Priority: " + formatGwei(tx.MaxPriorityFeePerGas) + " gwei\n")
 	}
 	if tx.EffectiveGasPrice != nil {
-		b.WriteString("Effective:   " + formatWei(tx.EffectiveGasPrice) + " gwei\n")
+		b.WriteString("Effective:   " + formatGwei(tx.EffectiveGasPrice) + " gwei\n")
 		if receipt != nil {
 			totalFee := new(big.Int).Mul(tx.EffectiveGasPrice, big.NewInt(int64(receipt.GasUsed)))
-			b.WriteString("Total Fee:   " + formatWei(totalFee) + " ETH\n")
+			b.WriteString("Total Fee:   " + formatEth(totalFee) + " ETH\n")
 		}
 	}
 	b.WriteString("\n")
@@ -113,7 +114,7 @@ func FormatTransaction(tx *decoder.Transaction, receipt *types.Receipt, isPendin
 			b.WriteString("Blob Gas Used: " + formatUint64(tx.BlobGasUsed) + "\n")
 		}
 		if tx.MaxFeePerBlobGas != nil {
-			b.WriteString("Max Fee/Blob:  " + formatWei(tx.MaxFeePerBlobGas) + " gwei\n")
+			b.WriteString("Max Fee/Blob:  " + formatGwei(tx.MaxFeePerBlobGas) + " gwei\n")
 		}
 		b.WriteString("\n")
 	}
@@ -150,28 +151,137 @@ func FormatTransaction(tx *decoder.Transaction, receipt *types.Receipt, isPendin
 	return b.String()
 }
 
-// formatWei converts wei to a human-readable string (ETH or gwei).
-func formatWei(wei *big.Int) string {
+// FormatGasAnalysis displays a gas and fee breakdown in a human-readable format.
+func FormatGasAnalysis(ga *analyzer.GasAnalysis) string {
+	if ga == nil {
+		return "no gas analysis available\n"
+	}
+
+	var b strings.Builder
+
+	b.WriteString("Gas & Fee Analysis\n")
+	b.WriteString(strings.Repeat("=", 80) + "\n\n")
+
+	// Basic context
+	b.WriteString("Tx Hash:      " + ga.TxHash + "\n")
+	b.WriteString("Block:        " + formatUint64(ga.BlockNumber) + " (" + ga.BlockHash + ")\n")
+	b.WriteString("Gas Used:     " + formatUint64(ga.GasUsed) + " / " + formatUint64(ga.GasLimit) + " (" + formatPercentage(ga.GasUsed, ga.GasLimit) + ")\n")
+	b.WriteString("\n")
+
+	// Per-gas pricing
+	b.WriteString("Per-Gas Prices (gwei)\n")
+	b.WriteString(strings.Repeat("-", 80) + "\n")
+	if ga.BaseFeePerGas != nil {
+		b.WriteString("Base fee:     " + formatGwei(ga.BaseFeePerGas) + "\n")
+	}
+	if ga.GasPrice != nil {
+		b.WriteString("Gas price:    " + formatGwei(ga.GasPrice) + "\n")
+	}
+	if ga.MaxFeePerGas != nil {
+		b.WriteString("Max fee:      " + formatGwei(ga.MaxFeePerGas) + "\n")
+	}
+	if ga.MaxPriorityFeePerGas != nil {
+		b.WriteString("Max priority: " + formatGwei(ga.MaxPriorityFeePerGas) + "\n")
+	}
+	if ga.EffectiveGasPrice != nil {
+		b.WriteString("Effective:    " + formatGwei(ga.EffectiveGasPrice) + "\n")
+	}
+	b.WriteString("\n")
+
+	// Aggregated fees
+	b.WriteString("Aggregated Fees (ETH)\n")
+	b.WriteString(strings.Repeat("-", 80) + "\n")
+	if ga.TotalFeePaid != nil {
+		b.WriteString("Total execution fee: " + formatEth(ga.TotalFeePaid) + "\n")
+	}
+	if ga.BaseFeeBurnt != nil {
+		b.WriteString("  Base fee burnt:    " + formatEth(ga.BaseFeeBurnt) + "\n")
+	}
+	if ga.PriorityFee != nil {
+		b.WriteString("  Priority (tip):     " + formatEth(ga.PriorityFee) + "\n")
+	}
+	if ga.TotalBlobFeePaid != nil {
+		b.WriteString("Blob fee:            " + formatEth(ga.TotalBlobFeePaid) + "\n")
+	}
+	if ga.TotalExecutionAndBlob != nil {
+		b.WriteString("Total (exec+blob):   " + formatEth(ga.TotalExecutionAndBlob) + "\n")
+	}
+	b.WriteString("\n")
+
+	// Components
+	if len(ga.Components) > 0 {
+		b.WriteString("Component Breakdown\n")
+		b.WriteString(strings.Repeat("-", 80) + "\n")
+		for _, c := range ga.Components {
+			b.WriteString(fmt.Sprintf("  %-8s %s\n", c.Label+":", formatEth(c.Value)))
+		}
+		b.WriteString("\n")
+	}
+
+	// Blob gas
+	if ga.BlobGasUsed > 0 {
+		b.WriteString("Blob Gas (EIP-4844)\n")
+		b.WriteString(strings.Repeat("-", 80) + "\n")
+		b.WriteString("Blob Gas Used: " + formatUint64(ga.BlobGasUsed) + "\n")
+		if ga.BlobGasPrice != nil {
+			b.WriteString("Blob Gas Price: " + formatGwei(ga.BlobGasPrice) + " gwei\n")
+		}
+		if ga.BlobGasFeeCap != nil {
+			b.WriteString("Blob Gas Cap:   " + formatGwei(ga.BlobGasFeeCap) + " gwei\n")
+		}
+		b.WriteString("\n")
+	}
+
+	// Notes
+	if len(ga.Notes) > 0 {
+		b.WriteString("Notes\n")
+		b.WriteString(strings.Repeat("-", 80) + "\n")
+		for _, n := range ga.Notes {
+			b.WriteString(" - " + n + "\n")
+		}
+		b.WriteString("\n")
+	}
+
+	return b.String()
+}
+
+// formatEth converts wei to a string representation in ETH (18 decimals).
+func formatEth(wei *big.Int) string {
 	if wei == nil {
 		return "0"
 	}
+	// Convert to float using big.Float directly for better precision handling in display
+	f := new(big.Float).SetInt(wei)
+	f.Quo(f, big.NewFloat(1e18))
+	// Format with up to 9 decimal places, trimming trailing zeros
+	// This prevents 0.000000000000000000 but keeps precision for small amounts
+	return strings.TrimRight(strings.TrimRight(f.Text('f', 9), "0"), ".")
+}
 
-	// For gwei display, divide by 1e9
-	gwei := new(big.Int).Div(wei, big.NewInt(1e9))
-	remainder := new(big.Int).Mod(wei, big.NewInt(1e9))
-
-	if remainder.Sign() == 0 {
-		return gwei.String()
+// formatGwei converts wei to a string representation in gwei (9 decimals).
+func formatGwei(wei *big.Int) string {
+	if wei == nil {
+		return "0"
 	}
-
-	// For ETH display, divide by 1e18
-	eth := new(big.Float).Quo(new(big.Float).SetInt(wei), big.NewFloat(1e18))
-	return eth.Text('f', 18)
+	f := new(big.Float).SetInt(wei)
+	f.Quo(f, big.NewFloat(1e9))
+	return strings.TrimRight(strings.TrimRight(f.Text('f', 9), "0"), ".")
 }
 
 // formatUint64 formats a uint64 with thousand separators.
 func formatUint64(n uint64) string {
-	return fmt.Sprintf("%d", n)
+	s := fmt.Sprintf("%d", n)
+	if len(s) < 4 {
+		return s
+	}
+	var b strings.Builder
+	for i, r := range s {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			b.WriteRune(',')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // formatPercentage calculates and formats a percentage.
